@@ -6,11 +6,14 @@ class Permission(BaseModel):
     tool: str
     actions: List[str]
     conditions: Optional[Dict[str, Any]] = None
+    require_approval: bool = False
 
 
 class Agent(BaseModel):
     id: str
     allow: List[Permission]
+    deny_if_parent: Optional[List[str]] = None
+    allow_only_parents: Optional[List[str]] = None
 
 
 class PolicyFile(BaseModel):
@@ -53,6 +56,28 @@ class PolicyFile(BaseModel):
                 version=self.version
             )
         
+        if ctx.parent_agent:
+            if agent.deny_if_parent and ctx.parent_agent in agent.deny_if_parent:
+                return Decision(
+                    allow=False,
+                    reason=f"Agent '{ctx.agent_id}' denied when called by parent '{ctx.parent_agent}'",
+                    version=self.version
+                )
+            
+            if agent.allow_only_parents and ctx.parent_agent not in agent.allow_only_parents:
+                return Decision(
+                    allow=False,
+                    reason=f"Agent '{ctx.agent_id}' can only be called by: {agent.allow_only_parents}, not '{ctx.parent_agent}'",
+                    version=self.version
+                )
+        else:
+            if agent.allow_only_parents:
+                return Decision(
+                    allow=False,
+                    reason=f"Agent '{ctx.agent_id}' requires a parent agent from: {agent.allow_only_parents}",
+                    version=self.version
+                )
+        
         for perm in agent.allow:
             if perm.tool != ctx.tool:
                 continue
@@ -68,6 +93,21 @@ class PolicyFile(BaseModel):
                         reason=violation,
                         version=self.version
                     )
+            
+            if perm.require_approval:
+                return Decision(
+                    allow=False,
+                    reason=f"Action {ctx.tool}.{ctx.action} requires approval",
+                    version=self.version,
+                    require_approval=True,
+                    approval_context={
+                        "agent_id": ctx.agent_id,
+                        "tool": ctx.tool,
+                        "action": ctx.action,
+                        "params": ctx.params,
+                        "parent_agent": ctx.parent_agent
+                    }
+                )
             
             return Decision(
                 allow=True,
@@ -117,6 +157,8 @@ class Decision(BaseModel):
     allow: bool
     reason: str
     version: int = 0
+    require_approval: bool = False
+    approval_context: Optional[Dict[str, Any]] = None
 
 
 class EvaluationContext(BaseModel):
@@ -124,4 +166,5 @@ class EvaluationContext(BaseModel):
     tool: str
     action: str
     params: Dict[str, Any] = Field(default_factory=dict)
+    parent_agent: Optional[str] = None
 

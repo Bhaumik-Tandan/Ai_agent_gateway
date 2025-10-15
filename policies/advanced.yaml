@@ -1,0 +1,47 @@
+version: 2
+agents:
+  # Orchestrator agent - can call other agents
+  - id: orchestrator-agent
+    allow:
+      - tool: payments
+        actions: [create]
+        conditions:
+          max_amount: 1000
+          currencies: [USD]
+  
+  # Worker agent - can only be called by orchestrator
+  - id: worker-agent
+    allow_only_parents: [orchestrator-agent]
+    allow:
+      - tool: files
+        actions: [read, write]
+        conditions:
+          folder_prefix: "/tmp/"
+  
+  # High-risk agent - requires approval for refunds
+  - id: refund-agent
+    allow:
+      - tool: payments
+        actions: [refund]
+        require_approval: true
+  
+  # Restricted agent - cannot be called by untrusted-agent
+  - id: secure-agent
+    deny_if_parent: [untrusted-agent, external-agent]
+    allow:
+      - tool: files
+        actions: [read]
+        conditions:
+          folder_prefix: "/secure/"
+  
+  # Admin agent with higher limits
+  - id: admin-agent
+    allow:
+      - tool: payments
+        actions: [create, refund]
+        conditions:
+          max_amount: 100000
+          currencies: [USD, EUR, GBP]
+      - tool: files
+        actions: [read, write]
+

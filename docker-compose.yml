@@ -18,6 +18,18 @@ services:
       - jaeger
     restart: unless-stopped
 
+  admin-ui:
+    build:
+      context: ./admin-ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_BASE=http://localhost:8080
+    depends_on:
+      - aegis-gateway
+    restart: unless-stopped
+
   jaeger:
     image: jaegertracing/all-in-one:1.51
     ports:
